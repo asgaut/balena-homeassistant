@@ -1,0 +1,11 @@
+FROM balenalib/%%BALENA_MACHINE_NAME%%-alpine-python:3.10-3.14-run
+
+COPY start.sh /tmp/start.sh
+RUN chmod +x /tmp/start.sh
+
+COPY requirements.txt requirements.txt
+RUN python -m pip install -r requirements.txt
+
+COPY control.py /tmp/control.py
+
+CMD ["sh","/tmp/start.sh"]

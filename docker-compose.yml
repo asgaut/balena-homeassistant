@@ -1,7 +1,8 @@
 version: '2'
 volumes:
-    config:
+    hass-config:
     mosquitto:
+    zigbee2mqtt-data:
 services:
   homeassistant:
     build: homeassistant
@@ -9,7 +10,7 @@ services:
       - 80:8123
     privileged: true
     volumes:
-      - 'config:/config'
+      - 'hass-config:/config'
     restart: always
   mqtt:
     build: mqtt
@@ -24,6 +25,34 @@ services:
     ports:
       - "3218:3218"
     volumes:
-      - 'config:/hass-config'
+      - 'hass-config:/hass-config'
     environment:
       - HC_BASEPATH=/hass-config
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    image: koenkk/zigbee2mqtt
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - "zigbee2mqtt-data:/app/data"
+    ports:
+      # Frontend port
+      - 8080:8080
+    environment:
+      - TZ=Europe/Berlin
+      - ZIGBEE2MQTT_CONFIG_SERIAL_PORT=/dev/ttyACM0
+      - ZIGBEE2MQTT_CONFIG_SERIAL_ADAPTER=deconz
+      - ZIGBEE2MQTT_CONFIG_MQTT_SERVER=mqtt://mqtt
+      - ZIGBEE2MQTT_CONFIG_HOMEASSISTANT=true
+      - ZIGBEE2MQTT_CONFIG_FRONTEND=true 
+      - ZIGBEE2MQTT_CONFIG_PERMIT_JOIN=false
+    devices:
+      # Make sure this matches your adapter location
+      - "/dev/ttyACM0:/dev/ttyACM0"
+  price-control:
+    container_name: price-control
+    build: price-control
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Berlin
+      - MQTT_SERVER=mqtt
