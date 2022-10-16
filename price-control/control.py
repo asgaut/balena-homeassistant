@@ -1,9 +1,11 @@
 import asyncio
 import datetime as dt
 import os
-import paho.mqtt.publish as publish
+import paho.mqtt.client as mqtt
+import signal
 import sys
 import tibber
+from socket import gethostname
 from time import sleep
 
 """
@@ -19,7 +21,28 @@ EXPENSIVE: The price is greater or equal to 115 % and smaller than 140 % compare
 VERY_EXPENSIVE: The price is greater or equal to 140 % compared to average price.
 """
 
+want_disconnect = False
+
+def on_connect(client, obj, flags, rc):
+    print("on_connect: "+str(rc))
+
+def on_disconnect(client, userdata, rc):
+    print("on_disconnect: "+str(rc))
+    if want_disconnect:
+        client.loop_stop()
+
+def on_log(client, obj, level, string):
+    # print(string)
+    pass
+
 async def control(dry_run: bool):
+    mqttc = mqtt.Client("control.py@" + gethostname())
+    mqttc.on_connect = on_connect
+    mqttc.on_disconnect = on_disconnect
+    mqttc.on_log = on_log
+    mqttc.connect(mqtt_server, 1883, 60)
+    mqttc.loop_start()
+
     while True:
         tibber_connection = tibber.Tibber(access_token)
         await tibber_connection.update_info()
@@ -49,6 +72,13 @@ async def control(dry_run: bool):
         old_price_level = ""
         print("Controlling power usage:")
         while True:
+            global want_disconnect
+
+            if want_disconnect:
+                mqttc.disconnect()
+                sleep(1)
+                sys.exit(0)
+
             now = dt.datetime.utcnow()
             now_hour = dt.datetime(now.year, now.month, now.day, now.hour, tzinfo=dt.timezone.utc)
             now_price_level = ""
@@ -67,7 +97,7 @@ async def control(dry_run: bool):
                     payload = '{"away_mode":"ON"}'
 
                 # VK Entré
-                publish.single("zigbee2mqtt/0x1fff0001000001f2/set", payload, hostname=mqtt_server)
+                mqttc.publish("zigbee2mqtt/0x1fff0001000001f2/set", payload, qos=0, retain=False)
                 sleep(3)
 
                 if now_price_level == "VERY_CHEAP" or now_price_level == "CHEAP" or now_price_level == "NORMAL":
@@ -78,28 +108,45 @@ async def control(dry_run: bool):
                     payload_power = '{"state": "OFF"}'
 
                 # VK Bad (kjeller)
-                publish.single("zigbee2mqtt/0x1fff000100000220/set", payload, hostname=mqtt_server)
+                mqttc.publish("zigbee2mqtt/0x1fff000100000220/set", payload, qos=0, retain=False)
                 sleep(3)
                 # VK Bad (2. etg)
-                publish.single("zigbee2mqtt/0x1fff000100000217/set", payload, hostname=mqtt_server)
+                mqttc.publish("zigbee2mqtt/0x1fff000100000217/set", payload, qos=0, retain=False)
                 sleep(3)
 
                 # VV-bereder power
                 # APEX smart plug 16A (Datek HLU2909K)
-                publish.single("zigbee2mqtt/0x086bd7fffeb6ac3c/set", payload_power, hostname=mqtt_server)
+                mqttc.publish("zigbee2mqtt/0x086bd7fffeb6ac3c/set", payload_power, qos=0, retain=False)
 
-                sleep(60)
+                for x in range(0, 60):
+                    if want_disconnect:
+                        break
+                    sleep(1)
+
                 if start_day != now.day:
                     break
             else:
+                want_disconnect = True
+                mqttc.disconnect()
+                sleep(1)
                 sys.exit(0)
 
+
+def signal_handler(sig, frame):
+    # remove our handler
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    print('Exiting...')
+    global want_disconnect
+    want_disconnect = True
 
 if __name__ ==  '__main__':
     access_token = os.environ.get('TIBBER_TOKEN', tibber.DEMO_TOKEN)
     mqtt_server = os.environ.get('MQTT_SERVER', 'mqtt')
 
     dry_run = len(sys.argv) > 1 and sys.argv[1] == '--dry'
+
+    want_disconnect = False
+    signal.signal(signal.SIGINT, signal_handler)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
