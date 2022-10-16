@@ -1,8 +1,9 @@
-version: '2'
+version: "2.1"
 volumes:
     hass-config:
     mosquitto:
     zigbee2mqtt-data:
+    tailscale-state: {}
 services:
   homeassistant:
     build: homeassistant
@@ -44,8 +45,9 @@ services:
       - ZIGBEE2MQTT_CONFIG_SERIAL_ADAPTER=deconz
       - ZIGBEE2MQTT_CONFIG_MQTT_SERVER=mqtt://mqtt
       - ZIGBEE2MQTT_CONFIG_HOMEASSISTANT=true
-      - ZIGBEE2MQTT_CONFIG_FRONTEND=true 
+      - ZIGBEE2MQTT_CONFIG_FRONTEND=true
       - ZIGBEE2MQTT_CONFIG_PERMIT_JOIN=false
+      - ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_LEVEL=warn
     devices:
       # Make sure this matches your adapter location
       - "/dev/ttyACM0:/dev/ttyACM0"
@@ -56,3 +58,21 @@ services:
     environment:
       - TZ=Europe/Berlin
       - MQTT_SERVER=mqtt
+  tailscale:
+    # Based on https://github.com/hslatman/tailscale-balena-block
+    build:
+      context: tailscale
+      dockerfile: Dockerfile.template
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    environment:
+      # Set via Balena device variable instead
+      # - TAILSCALE_KEY: <YOUR_TAILSCALE_KEY>
+      - TAILSCALE_IP=true
+      #- TAILSCALE_TAGS=tag:homeassistant
+    volumes:
+      - tailscale-state:/tailscale
+    labels:
+      # Required to get BALENA_API_KEY set inside container
+      io.balena.features.balena-api: '1'
