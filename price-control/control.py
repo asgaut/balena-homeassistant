@@ -2,7 +2,6 @@ import asyncio
 import datetime as dt
 import os
 import paho.mqtt.publish as publish
-import set_mill_temp
 import sys
 import tibber
 from time import sleep
@@ -48,7 +47,7 @@ async def control(dry_run: bool):
 
         start_day = dt.datetime.utcnow().day
         old_price_level = ""
-        print("Controlling away_mode:")
+        print("Controlling power usage:")
         while True:
             now = dt.datetime.utcnow()
             now_hour = dt.datetime(now.year, now.month, now.day, now.hour, tzinfo=dt.timezone.utc)
@@ -73,10 +72,10 @@ async def control(dry_run: bool):
 
                 if now_price_level == "VERY_CHEAP" or now_price_level == "CHEAP" or now_price_level == "NORMAL":
                     payload = '{"away_mode":"OFF"}'
-                    temperature = 35 # turns relay on
+                    payload_power = '{"state": "ON"}'
                 else:
                     payload = '{"away_mode":"ON"}'
-                    temperature = 5 # turns relay off
+                    payload_power = '{"state": "OFF"}'
 
                 # VK Bad (kjeller)
                 publish.single("zigbee2mqtt/0x1fff000100000220/set", payload, hostname=mqtt_server)
@@ -85,8 +84,9 @@ async def control(dry_run: bool):
                 publish.single("zigbee2mqtt/0x1fff000100000217/set", payload, hostname=mqtt_server)
                 sleep(3)
 
-                # VV-bereder
-                set_mill_temp.set_mill_temp(mill_ip, temperature, False)
+                # VV-bereder power
+                # APEX smart plug 16A (Datek HLU2909K)
+                publish.single("zigbee2mqtt/0x086bd7fffeb6ac3c/set", payload_power, hostname=mqtt_server)
 
                 sleep(60)
                 if start_day != now.day:
@@ -98,10 +98,6 @@ async def control(dry_run: bool):
 if __name__ ==  '__main__':
     access_token = os.environ.get('TIBBER_TOKEN', tibber.DEMO_TOKEN)
     mqtt_server = os.environ.get('MQTT_SERVER', 'mqtt')
-    mill_ip = os.environ.get("MILL_IP")
-    if mill_ip == None:
-        sys.stderr.write("MILL_IP environment variable must be set")
-        sys.exit(1)
 
     dry_run = len(sys.argv) > 1 and sys.argv[1] == '--dry'
 
