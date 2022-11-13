@@ -84,9 +84,12 @@ async def control(dry_run: bool):
             now_price_level = ""
             for key in home.price_level:
                 if dt.datetime.fromisoformat(key).astimezone(dt.timezone.utc) == now_hour:
-                    now_price_level = home.price_level[key]
+                    if home.price_total[key] <= 1.0:
+                        now_price_level = "NORMAL"
+                    else:
+                        now_price_level = home.price_level[key]
                     if now_price_level != old_price_level:
-                        print(key, '->', home.price_level[key])
+                        print(key, '->', now_price_level)
                         old_price_level = now_price_level
                     break;
 
